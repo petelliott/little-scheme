@@ -57,6 +57,7 @@
    ((is-syntax? 'if form)     (eval-if form scope))
    ((is-syntax? 'lambda form) (eval-lambda form scope))
    ((is-syntax? 'quote form)  (cadr form))
+   ((is-syntax? 'begin form)  (eval-begin (cdr form) scope))
    ((pair? form)              (eval-fun form scope))
    ((symbol? form)            (eval-ref form scope))
    (else                      form)))
@@ -80,7 +81,29 @@
 
 (define (eval-lambda form scope)
   (lambda args
-    (eval (caddr form) (push-args (cadr form) args scope))))
+    (eval-begin (cddr form) (push-args (cadr form) args scope))))
+
+;; eval-define returns a new scope, rather than a result
+(define (eval-define form scope)
+  (cond
+   ((pair? (cadr form))
+    (eval-define `(define ,(caadr form) (lambda ,(cdadr form) ,@(cddr form))) scope))
+   ((symbol? (cadr form))
+    ;; TODO make define bind recursivly
+    (acons (cadr form) (eval (caddr form) scope) scope))
+   (else (error "invalid name to define: " (cadr form)))))
+
+;; Note: while most syntax functions take the whole form, begin takes the
+;; cdr. this is because it is also used in lambda, and is recursive.
+(define (eval-begin body scope)
+  (cond
+   ((null? body) (values))
+   ((is-syntax? 'define (car body))
+    (eval-begin (cdr body) (eval-define (car body) scope)))
+   ((null? (cdr body)) (eval (car body) scope))
+   (else
+    (eval (car body) scope)
+    (eval-begin (cdr body) scope))))
 
 ;;; the repl, etc.
 
@@ -93,11 +116,32 @@
     (* . ,*)
     (<= . ,<=)))
 
+(define (toplevel-eval form)
+  (eval form toplevel-scope))
+
+(define (scoped-repl render-prompt render-result scope)
+  (define form (begin
+                 (render-prompt)
+                 (read)))
+  (cond
+   ((eof-object? form) (values))
+   ((is-syntax? 'exit form) (values))
+   ((is-syntax? 'define form)
+    (scoped-repl render-prompt render-result (eval-define form scope)))
+   (else
+    (render-result (eval form scope))
+    (scoped-repl render-prompt render-result scope))))
+
 (define (repl)
-  (define form (read))
-  (if form
-      (begin
-        (write (eval form toplevel-scope))
-        (newline)
-        (repl))
-      #f))
+  (scoped-repl (lambda () (display "> "))
+               (lambda (result)
+                 (display "=> ")
+                 (write result)
+                 (newline))
+               toplevel-scope))
+
+
+(define (file-repl)
+  (scoped-repl (lambda () #f)
+               (lambda (result) #f)
+               toplevel-scope))
