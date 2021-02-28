@@ -30,21 +30,36 @@
       (cons (proc (car lst))
             (map proc (cdr lst)))))
 
-;;; implementation of eval
+;; push a key-value pair to an alist
+(define (acons key value alist)
+  (cons (cons key value) alist))
 
+;;; utilties
+
+;; checks if form is a pair whose car is sym
 (define (is-syntax? sym form)
   (and (pair? form)
        (eq? (car form) sym)))
 
+;; lines up arguments and their variables names, then pushes them to the scope
+(define (push-args names args scope)
+  (cond
+   ((and (null? names) (null? args)) scope)
+   ((or (null? names) (null? args))
+    (error "mismatch in number of arguments to function:" names args))
+   (else (push-args (cdr names) (cdr args)
+                    (acons (car names) (car args) scope)))))
+
+;;; implementation of eval
+
 (define (eval form scope)
   (cond
-   ((is-syntax? 'if form) (eval-if form scope))
+   ((is-syntax? 'if form)     (eval-if form scope))
    ((is-syntax? 'lambda form) (eval-lambda form scope))
-   ((is-syntax? 'quote form) (cadr form))
-   ((pair? form) (eval-fun form scope))
-   ((symbol? form) (eval-ref form scope))
-   (else form)))
-
+   ((is-syntax? 'quote form)  (cadr form))
+   ((pair? form)              (eval-fun form scope))
+   ((symbol? form)            (eval-ref form scope))
+   (else                      form)))
 
 (define (eval-fun form scope)
   (apply (eval (car form) scope)
@@ -52,27 +67,23 @@
 
 (define (eval-ref form scope)
   (cond
-   ((null? scope) #f)
+   ((null? scope) (error "variable does not exist:" form))
    ((eq? form (caar scope)) (cdar scope))
    (else (eval-ref form (cdr scope)))))
 
 ;;; built in syntax
+
 (define (eval-if form scope)
   (if (eval (cadr form) scope)
       (eval (caddr form) scope)
       (eval (cadddr form) scope)))
-
-(define (push-args names args scope)
-  (if (null? names)
-      scope
-      (push-args (cdr names) (cdr args)
-                 (cons (cons (car names) (car args)) scope))))
 
 (define (eval-lambda form scope)
   (lambda args
     (eval (caddr form) (push-args (cadr form) args scope))))
 
 ;;; the repl, etc.
+
 (define toplevel-scope
   `((car . ,car)
     (cdr . ,cdr)
@@ -82,18 +93,11 @@
     (* . ,*)
     (<= . ,<=)))
 
-(define (top-eval form)
-  (eval form toplevel-scope))
-
-;;; examples
-
-(define (add-example)
-  (top-eval '((lambda (a b) (+ a b)) 5 6)))
-
-(define (fib-example)
-  (top-eval '((lambda (f n) (f f n))
-               (lambda (self n)
-                 (if (<= n 1)
-                     n
-                     (+ (self self (- n 1)) (self self (- n 2)))))
-               12)))
+(define (repl)
+  (define form (read))
+  (if form
+      (begin
+        (write (eval form toplevel-scope))
+        (newline)
+        (repl))
+      #f))
