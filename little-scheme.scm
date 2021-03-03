@@ -50,6 +50,17 @@
    (else (push-args (cdr names) (cdr args)
                     (acons (car names) (car args) scope)))))
 
+(define (scope-set! name value scope)
+  (cond
+   ((null? scope) (error "scope-set!: variable does not exist:" name))
+   ((eq? name (caar scope)) (set-cdr! (car scope) value))
+   (else (scope-set! name value (cdr scope)))))
+
+(define (recursive-bind name scope proc)
+  (define new-scope (acons name #f scope))
+  (scope-set! name (proc new-scope) new-scope)
+  new-scope)
+
 ;;; implementation of eval
 
 (define (eval form scope)
@@ -89,8 +100,7 @@
    ((pair? (cadr form))
     (eval-define `(define ,(caadr form) (lambda ,(cdadr form) ,@(cddr form))) scope))
    ((symbol? (cadr form))
-    ;; TODO make define bind recursivly
-    (acons (cadr form) (eval (caddr form) scope) scope))
+    (recursive-bind (cadr form) scope (lambda (new-scope) (eval (caddr form) new-scope))))
    (else (error "invalid name to define: " (cadr form)))))
 
 ;; Note: while most syntax functions take the whole form, begin takes the
@@ -139,7 +149,6 @@
                  (write result)
                  (newline))
                toplevel-scope))
-
 
 (define (file-repl)
   (scoped-repl (lambda () #f)
