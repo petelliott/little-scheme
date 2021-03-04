@@ -70,6 +70,7 @@
    ((is-syntax? 'quote form)      (cadr form))
    ((is-syntax? 'begin form)      (eval-begin (cdr form) scope))
    ((is-syntax? 'quasiquote form) (eval-quasiquote (cadr form) scope))
+   ((is-syntax? 'cond form)       (eval-cond (cdr form) scope))
    ((pair? form)                  (eval-fun form scope))
    ((symbol? form)                (eval-ref form scope))
    (else                          form)))
@@ -123,16 +124,22 @@
     (eval (car body) scope)
     (eval-begin (cdr body) scope))))
 
+(define (eval-cond form scope)
+  (cond
+   ((null? form) (values))
+   ((eq? 'else (caar form)) (eval-begin (cdar form) scope))
+   ((eval (caar form) scope) (eval-begin (cdar form) scope))
+   (else (eval-cond (cdr form) scope))))
+
 ;;; the repl, etc.
 
 (define toplevel-scope
   `((car . ,car)
     (cdr . ,cdr)
     (cons . ,cons)
-    (+ . ,+)
-    (- . ,-)
-    (* . ,*)
-    (<= . ,<=)))
+    (eof-object? . ,eof-object?)
+    (values . ,values)
+    (read . ,read)))
 
 (define (toplevel-eval form)
   (eval form toplevel-scope))
@@ -162,3 +169,5 @@
   (scoped-repl (lambda () #f)
                (lambda (result) #f)
                toplevel-scope))
+
+(file-repl)
