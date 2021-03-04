@@ -65,13 +65,14 @@
 
 (define (eval form scope)
   (cond
-   ((is-syntax? 'if form)     (eval-if form scope))
-   ((is-syntax? 'lambda form) (eval-lambda form scope))
-   ((is-syntax? 'quote form)  (cadr form))
-   ((is-syntax? 'begin form)  (eval-begin (cdr form) scope))
-   ((pair? form)              (eval-fun form scope))
-   ((symbol? form)            (eval-ref form scope))
-   (else                      form)))
+   ((is-syntax? 'if form)         (eval-if form scope))
+   ((is-syntax? 'lambda form)     (eval-lambda form scope))
+   ((is-syntax? 'quote form)      (cadr form))
+   ((is-syntax? 'begin form)      (eval-begin (cdr form) scope))
+   ((is-syntax? 'quasiquote form) (eval-quasiquote (cadr form) scope))
+   ((pair? form)                  (eval-fun form scope))
+   ((symbol? form)                (eval-ref form scope))
+   (else                          form)))
 
 (define (eval-fun form scope)
   (apply (eval (car form) scope)
@@ -102,6 +103,13 @@
    ((symbol? (cadr form))
     (recursive-bind (cadr form) scope (lambda (new-scope) (eval (caddr form) new-scope))))
    (else (error "invalid name to define: " (cadr form)))))
+
+(define (eval-quasiquote form scope)
+  (cond
+   ((is-syntax? 'unquote form) (eval (cadr form) scope))
+   ((pair? form) (cons (eval-quasiquote (car form) scope)
+                       (eval-quasiquote (cdr form) scope)))
+   (else form)))
 
 ;; Note: while most syntax functions take the whole form, begin takes the
 ;; cdr. this is because it is also used in lambda, and is recursive.
